@@ -6,7 +6,7 @@ import http.server, socketserver, websockets
 # ========== CONFIG ==========
 PORT = 8000                    # HTTPS for Quest
 WS_PORT = 8001                 # WebSocket for realtime control
-API_KEY = "AIzaSyA-P7nDXxCDzpgaaidW9cSP_EAY2X4xeC4"  # 🔑 Replace with your Gemini API key
+API_KEY = ""  # 🔑 Replace with your Gemini API key
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 SAVE_DIR = "captures"
 CAPTURE_REGION = None          # (x1, y1, x2, y2) for your cast window
@@ -22,7 +22,8 @@ def analyze_image(b64img):
         "contents": [
             {
                 "parts": [
-                    {"text": "Describe what the VR user is seeing briefly in 12 words or less."},
+                    {"text": ("You are a human biology expert. Analyze the specific anatomical region highlighted by the VR user in this image. Provide a concise explanation of its relevance in human anatomy in one sentence."
+)},
                     {"inline_data": {"mime_type": "image/jpeg", "data": b64img}},
                 ]
             }
@@ -89,6 +90,53 @@ async def broadcast(msg):
         return
     await asyncio.gather(*[ws.send(msg) for ws in clients if ws.open])
 
+async def ws_handler(websocket):
+    clients.add(websocket)
+    await websocket.send(latest_reply)
+    try:
+        async for message in websocket:
+            if message.strip().lower() == "capture":
+                print("🎮 Trigger capture (full view)")
+                reply = take_screenshot_and_analyze()
+                await broadcast(reply)
+            elif message.strip().lower() == "capture_region":
+                print("✏️ Region draw capture — cropping central area")
+                reply = capture_and_analyze_region()
+                await broadcast(reply)
+    finally:
+        clients.remove(websocket)
+
+def capture_and_analyze_region():
+    """Capture a zoomed central portion of the screen (simulating drawn region)"""
+    global latest_reply
+    try:
+        img = ImageGrab.grab(bbox=CAPTURE_REGION)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        w, h = img.size
+        crop_size = int(min(w, h) * 0.4)  # 40% center crop
+        left = (w - crop_size) // 2
+        top = (h - crop_size) // 2
+        cropped = img.crop((left, top, left + crop_size, top + crop_size))
+        buf = io.BytesIO()
+        cropped.save(buf, format="JPEG", quality=85)
+        b64img = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        img_path = os.path.join(SAVE_DIR, f"region_{ts}.jpg")
+        with open(img_path, "wb") as f:
+            f.write(base64.b64decode(b64img))
+        print(f"🖊️ Saved region {img_path}")
+
+        reply = analyze_image(b64img)
+        latest_reply = f"{reply}"
+        print(f"🤖 Gemini (region): {reply}")
+        return latest_reply
+    except Exception as e:
+        print("❌ Error during region capture:", e)
+        return "(error)"
+
+
 # --- HTTPS static file server ---
 class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args):
@@ -98,8 +146,8 @@ def start_http():
     httpd = socketserver.TCPServer(("0.0.0.0", PORT), Handler)
     httpd.socket = ssl.wrap_socket(
         httpd.socket,
-        keyfile="csc-key.pem",
-        certfile="csc.pem",
+        keyfile="hotspot-key.pem",
+        certfile="hotspot.pem",
         server_side=True,
     )
     print(f"✅ Serving HTTPS on port {PORT}")
@@ -112,7 +160,7 @@ print("🌐 Starting WebSocket server (wss://)")
 
 async def main():
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ssl_context.load_cert_chain(certfile="csc.pem", keyfile="csc-key.pem")
+    ssl_context.load_cert_chain(certfile="hotspot.pem", keyfile="hotspot-key.pem")
 
     async with websockets.serve(ws_handler, "0.0.0.0", WS_PORT, ssl=ssl_context):
         print(f"✅ WebSocket server running on wss://0.0.0.0:{WS_PORT}")

@@ -2,97 +2,85 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Gemini VR Scene (Improved HUD)</title>
+    <title>Gemini VR Scene — Raycast Free Draw Capture</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
-    <style>body { margin: 0; background: #000; }</style>
+    <style>
+      body { margin: 0; background: #000; }
+    </style>
   </head>
 
   <body>
-    <a-scene background="color: #101418" webxr="optionalFeatures: local-floor">
-      <!-- 💡 Lighting -->
+    <a-scene webxr="optionalFeatures: local-floor">
+      <!-- Lights -->
       <a-entity light="type: ambient; intensity: 0.8"></a-entity>
       <a-entity light="type: directional; intensity: 1.2" position="2 4 3"></a-entity>
 
-      <!-- 🪨 Ground -->
+      <!-- Ground -->
       <a-plane rotation="-90 0 0" width="30" height="30" color="#222" shadow="receive: true"></a-plane>
 
-      <!-- 👤 Player Rig -->
+      <!-- Player Rig -->
       <a-entity id="rig" movement-controls="speed: 0.25" position="0 1.6 0">
         <a-entity camera look-controls>
-          <!-- ✨ Gemini Card (bottom-right HUD style) -->
-          <a-entity id="geminiCard"
-                    position="0.6 -0.4 -1.2"
+          <!-- Gemini HUD Card -->
+          <a-entity style="word-wrap: break-word;" id="geminiCard"
+                    position="-0.35 -0.1 -2.3"
                     visible="true"
-                    scale="0.7 0.7 0.7">
-            <a-plane width="1.4" height="0.45"
-                     color="#0a0a0a"
-                     opacity="0.75"
-                     material="shader: flat"
-                     shadow="cast: true; receive: true">
-            </a-plane>
+                    scale="0.8 0.8 0.8"
+                    animation__fadein="property: material.opacity; from: 0; to: 1; dur: 400"
+                    animation__fadeout="property: material.opacity; from: 1; to: 0; dur: 400; startEvents: fadeout">
 
-            <!-- Subtle border glow -->
-            <a-ring radius-inner="0.71" radius-outer="0.73" position="0 0 0.01"
-                    material="color: #00c6ff; emissive: #00c6ff; emissiveIntensity: 0.3; shader: flat">
-            </a-ring>
+            <a-plane id="geminiBg"
+                     style="word-wrap: break-word;"
+                     width="1.2" height="0.5"
+                     material="shader: flat; color: #9B37FF; opacity: 0.92"
+                     geometry="primitive: plane"
+                     position="0 0 0"></a-plane>
+ 
+           <a-text
+                id="geminiText"
+                value="Hold trigger to draw a region (via raycast)"
+                align="center"
+                wrap-count="42"
+                position="0 -0.03 0.02"
+                width="1.2"           <!-- wider layout -->
+                color="#ffffff"       <!-- soft pinkish-white -->
+                font="https://cdn.aframe.io/fonts/mozillavr.fnt"
+                scale="1.8 1.8 1.8">  <!-- larger overall text size -->
+                </a-text>
 
-            <!-- Header -->
-            <a-text value="Gemini"
-                    position="0 0.17 0.02"
-                    align="center"
-                    width="1.3"
-                    color="#00c6ff"
-                    font="mozillavr">
-            </a-text>
-
-            <!-- Response text -->
-            <a-text id="geminiText"
-                    value="Press trigger to analyze"
-                    align="center"
-                    wrap-count="40"
-                    position="0 -0.05 0.02"
-                    width="1.3"
-                    color="#fff"
-                    font="mozillavr">
-            </a-text>
           </a-entity>
         </a-entity>
 
-        <!-- 🎮 Right Controller -->
+        <!-- Right Controller (now raycast drawing tool) -->
         <a-entity id="rightHand"
                   oculus-touch-controls="hand: right"
-                  raycaster="objects: .interactable"
-                  line="color: yellow; opacity: 0.8"
-                  cursor
-                  trigger-capture>
+                  raycaster="objects: .interactable, .environment; far: 10; showLine: true; lineColor: #00ffff; linewidth:10"
+                  raycaster-draw>
         </a-entity>
 
-        <!-- 🖐️ Left Controller -->
         <a-entity id="leftHand" oculus-touch-controls="hand: left"></a-entity>
       </a-entity>
 
-      <!-- 🧠 Assets -->
+      <!-- Assets -->
       <a-assets>
         <a-asset-item id="muscle" src="models/muscle.glb"></a-asset-item>
         <a-asset-item id="room" src="models/room.glb"></a-asset-item>
         <a-asset-item id="heart" src="models/heart.glb"></a-asset-item>
       </a-assets>
 
-      <!-- 🏠 Room Environment -->
-      <a-entity gltf-model="#room" position="0 0 0" scale="1 1 1"
-                class="environment" shadow="receive: true"></a-entity>
+      <!-- Room -->
+      <a-entity gltf-model="#room" position="0 0 0" scale="1 1 1" class="environment"></a-entity>
 
-      <!-- 🦴 Skeleton Model -->
-      <a-entity gltf-model="#muscle" position="0 3 -1.5" scale="100 100 100"
-                class="interactable" shadow="cast: true"></a-entity>
+      <!-- Skeleton -->
+      <a-entity gltf-model="#muscle" position="0 3 -1.5" scale="100 100 100" class="interactable"></a-entity>
 
-      <!-- ❤️ Heart Model -->
+      <!-- Heart -->
       <a-entity gltf-model="#heart" position="1.2 1 -2.5" rotation="0 -20 0"
-                scale="0.25 0.25 0.25" class="interactable" shadow="cast: true"></a-entity>
+                scale="0.25 0.25 0.25" class="interactable"></a-entity>
 
-      <!-- 🔧 Script -->
+      <!-- ============= Script ============= -->
       <script>
         const textEl = document.getElementById("geminiText");
         const host = window.location.hostname;
@@ -100,22 +88,18 @@
 
         ws.onopen = () => {
           console.log("✅ Connected to Gemini WebSocket");
-          textEl.setAttribute("value", "Connected. Press trigger to analyze.");
+          textEl.setAttribute("value", "Connected. Use trigger to draw remotely.");
         };
 
         ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            const msg = data.text || event.data || "(no text)";
+          const msg = event.data;
+          console.log("🤖 Gemini:", msg);
+          const bg = document.getElementById("geminiBg");
+          bg.emit("fadeout");
+          setTimeout(() => {
             textEl.setAttribute("value", msg);
-            console.log("🤖 Gemini:", msg);
-            if (data.audio) {
-              const audio = new Audio("data:audio/mp3;base64," + data.audio);
-              audio.play().catch(err => console.warn("Audio play error:", err));
-            }
-          } catch {
-            textEl.setAttribute("value", event.data);
-          }
+            bg.emit("fadein");
+          }, 400);
         };
 
         ws.onerror = (err) => {
@@ -123,14 +107,65 @@
           textEl.setAttribute("value", "⚠️ WebSocket error");
         };
 
-        // 🎮 Trigger Capture
-        AFRAME.registerComponent("trigger-capture", {
+        // --- Raycast-based Free Draw Component ---
+        AFRAME.registerComponent("raycaster-draw", {
           init: function () {
+            this.raycaster = this.el.components.raycaster;
+            this.isDrawing = false;
+            this.points = [];
+            this.line = null;
+
             this.el.addEventListener("triggerdown", () => {
-              console.log("🎮 Trigger pressed — sending 'capture'");
-              textEl.setAttribute("value", "Capturing...");
-              ws.send("capture");
+              this.isDrawing = true;
+              this.points = [];
+              textEl.setAttribute("value", "✏️ Drawing at a distance...");
             });
+
+            this.el.addEventListener("triggerup", () => {
+              if (this.isDrawing) {
+                this.isDrawing = false;
+                textEl.setAttribute("value", "🔍 Analyzing drawn region...");
+                ws.send("capture_region");
+
+                if (this.line) {
+                  this.el.sceneEl.object3D.remove(this.line);
+                  this.line.geometry.dispose();
+                  this.line.material.dispose();
+                  this.line = null;
+                }
+              }
+            });
+          },
+
+          tick: function () {
+            if (!this.isDrawing || !this.raycaster) return;
+
+            const intersections = this.raycaster.intersections;
+            if (intersections.length === 0) return;
+
+            const point = intersections[0].point; // draw where ray hits object
+            if (!point) return;
+
+            this.points.push(point.clone());
+
+            if (this.points.length > 1) {
+              const geometry = new THREE.BufferGeometry().setFromPoints(this.points);
+              const material = new THREE.LineBasicMaterial({
+                color: 0x00ffff,
+                linewidth: 4,
+                transparent: true,
+                opacity: 0.9,
+              });
+
+              if (this.line) {
+                this.el.sceneEl.object3D.remove(this.line);
+                this.line.geometry.dispose();
+                this.line.material.dispose();
+              }
+
+              this.line = new THREE.Line(geometry, material);
+              this.el.sceneEl.object3D.add(this.line);
+            }
           },
         });
       </script>
